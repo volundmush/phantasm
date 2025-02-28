@@ -1,0 +1,35 @@
+dynaconf_merge = true
+
+[portal.classes]
+link = "phantasm.portal.link.Link"
+
+[game.networking]
+# governs who is allowed to use X-Forwarded-For and have it respected.
+trusted_proxy_ips = ["127.0.0.1"]
+port = 8000
+
+[fastapi.routers]
+# every module listed here must have a global named
+# "router" to be imported.
+auth = "phantasm.game.api.auth"
+
+[jwt]
+algorithm = "HS256"
+secret = "CHANGE_ME_DAMMIT"
+token_expire_minutes = 30
+# 7 days in minutes.
+refresh_expire_minutes = 10080
+
+[game.classes]
+# The class that'll be used to handle the game.
+application = "phantasm.game.application.Application"
+
+[game.tortoise]
+db_url = "postgres://postgres:password@localhost:5432/phantasm"
+use_tz = true
+
+[game.tortoise.modules]
+auth = ["phantasm.game.models.auth"]
+characters = ["phantasm.game.models.characters"]
+factions = ["phantasm.game.models.factions"]
+info = ["phantasm.game.models.info"]

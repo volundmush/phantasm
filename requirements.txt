@@ -1,0 +1,9 @@
+mudpy
+rich
+tortoise-orm[asyncpg]
+fastapi[standard]
+aioquic
+hypercorn[h3]
+pyjwt
+passlib
+argon2-cffi
