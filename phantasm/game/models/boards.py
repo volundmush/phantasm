@@ -30,6 +30,17 @@ class Post(Model):
     modified_at = fields.DatetimeField(null=True, auto_now=True)
     deleted_at = fields.DatetimeField(null=True)
 
+    def display_order(self) -> str:
+        if self.sub_order > 0:
+            return f"{self.order}.{self.sub_order}"
+        return str(self.order)
+
     class Meta:
         ordering = ["board", "order", "sub_order"]
         unique_together = ["board", "order", "sub_order"]
+
+class LastRead(Model):
+    id = fields.BigIntField(primary_key=True)
+    user = fields.ForeignKeyField("auth.User", related_name="board_read", on_delete=fields.CASCADE)
+    post = fields.ForeignKeyField("boards.Post", related_name="user_read" on_delete=fields.CASCADE)
+    read_at = fields.DateTimeField(auto_now_add=True, editable=True)
