@@ -5,8 +5,8 @@ from tortoise import fields
 class Faction(Model):
     id = fields.IntField(primary_key=True)
     name = fields.CharField(max_length=255, unique=True)
-    created_at = fields.DatetimeField(null=True, auto_now_add=True)
-    modified_at = fields.DatetimeField(null=True, auto_now=True)
+    created_at = fields.DatetimeField(auto_now_add=True)
+    modified_at = fields.DatetimeField(auto_now=True)
     description = fields.TextField()
     abbreviation = fields.CharField(max_length=10, unique=True)
     category = fields.CharField(max_length=255, default='Uncategorized')
@@ -38,8 +38,8 @@ class Member(Model):
     faction = fields.ForeignKeyField("factions.Faction", related_name="members", on_delete=fields.CASCADE)
     character = fields.ForeignKeyField("characters.Character", related_name="factions", on_delete=fields.CASCADE)
     rank = fields.ForeignKeyField("factions.Rank", related_name="holders", on_delete=fields.RESTRICT)
-    created_at = fields.DatetimeField(null=True, auto_now_add=True)
-    modified_at = fields.DatetimeField(null=True, auto_now=True)
+    created_at = fields.DatetimeField(auto_now_add=True)
+    modified_at = fields.DatetimeField(auto_now=True)
     permissions = fields.TextField(default='')
     title = fields.CharField(max_length=255, null=True)
 

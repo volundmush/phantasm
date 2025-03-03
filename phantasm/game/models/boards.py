@@ -42,5 +42,5 @@ class Post(Model):
 class LastRead(Model):
     id = fields.BigIntField(primary_key=True)
     user = fields.ForeignKeyField("auth.User", related_name="board_read", on_delete=fields.CASCADE)
-    post = fields.ForeignKeyField("boards.Post", related_name="user_read" on_delete=fields.CASCADE)
-    read_at = fields.DateTimeField(auto_now_add=True, editable=True)
+    post = fields.ForeignKeyField("boards.Post", related_name="user_read", on_delete=fields.CASCADE)
+    read_at = fields.DatetimeField(auto_now_add=True, editable=True)
