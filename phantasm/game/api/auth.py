@@ -9,7 +9,7 @@ from tortoise.transactions import in_transaction
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 
-from .utils import crypt_context, oauth2_scheme, get_real_ip
+from .utils import crypt_context, oauth2_scheme, get_real_ip, get_current_user
 from ..models import auth
 
 router = APIRouter()
@@ -88,7 +88,7 @@ async def refresh_token(ref: str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token.")
     if (sub := payload.get("sub", None)) is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
-    if not (user := await auth.User.filter(id=sub).first()):
+    if not (user := await auth.User.filter(id=sub).prefetch_related("characters").first()):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     # Create a new access token
@@ -101,3 +101,8 @@ async def refresh_token(ref: str):
         "refresh_token": new_refresh_token,  # if you want to rotate refresh tokens
         "token_type": "bearer"
     }
+
+
+@router.get("/me")
+async def read_users_me(current_user: Annotated[auth.User, Depends(get_current_user)]):
+    return auth.User_Pydantic.from_tortoise_orm(current_user)

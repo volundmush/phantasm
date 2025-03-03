@@ -7,3 +7,4 @@ hypercorn[h3]
 pyjwt
 passlib
 argon2-cffi
+aerich

@@ -12,6 +12,7 @@ port = 8000
 # every module listed here must have a global named
 # "router" to be imported.
 auth = "phantasm.game.api.auth"
+users = "phantasm.game.api.users"
 
 [jwt]
 algorithm = "HS256"
