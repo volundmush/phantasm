@@ -5,7 +5,7 @@ from tortoise.contrib.pydantic import pydantic_model_creator, pydantic_queryset_
 from .mixins import TimestampMixin
 
 class User(TimestampMixin, Model):
-    id = fields.IntField(primary_key=True)
+    id = fields.UUIDField(primary_key=True)
     # always save to email field as lowercase.
     email = fields.CharField(max_length=255, unique=True)
     admin_level = fields.SmallIntField(default=0)

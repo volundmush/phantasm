@@ -35,8 +35,7 @@ async def register(data: Annotated[OAuth2PasswordRequestForm, Depends()]):
 
 def _create_token(user: auth.User, expires: datetime, refresh: bool = False):
     data = {
-        "sub": user.id,
-        "username": user.email,
+        "sub": str(user.id),
         "exp": expires,
         "iat": datetime.now(tz=timezone.utc),
     }
@@ -88,7 +87,7 @@ async def refresh_token(ref: str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token.")
     if (sub := payload.get("sub", None)) is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
-    if not (user := await auth.User.filter(id=sub).prefetch_related("characters").first()):
+    if not (user := await auth.User.filter(id=sub).first()):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     # Create a new access token
@@ -105,4 +104,4 @@ async def refresh_token(ref: str):
 
 @router.get("/me")
 async def read_users_me(current_user: Annotated[auth.User, Depends(get_current_user)]):
-    return auth.User_Pydantic.from_tortoise_orm(current_user)
+    return await auth.User_Pydantic.from_tortoise_orm(current_user)

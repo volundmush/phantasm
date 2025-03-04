@@ -1,12 +1,15 @@
 import mudpy
 import jwt
+from typing import Annotated
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi import Request, Annotated, Depends, HTTPException, status
+from fastapi import Request, Depends, HTTPException, status
 
 crypt_context = CryptContext(schemes=["argon2"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+from ..models import auth
 
 def get_real_ip(request: Request):
     """

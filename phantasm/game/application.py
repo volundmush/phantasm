@@ -16,6 +16,9 @@ class Application(OldApplication):
         self.fastapi_instance = None
 
     async def setup_tortoise(self):
+        from tortoise.queryset import QuerySet
+        #monkey patch for compatability.
+        QuerySet.fetch_related = QuerySet.prefetch_related
         settings = mudpy.SETTINGS["GAME"]["tortoise"]
         await Tortoise.init(**settings)
         await Tortoise.generate_schemas()

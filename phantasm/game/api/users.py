@@ -3,6 +3,7 @@ from typing import Annotated
 
 import mudpy
 import jwt
+import uuid
 
 from tortoise.transactions import in_transaction
 
@@ -18,34 +19,25 @@ router = APIRouter()
 async def get_users(user: Annotated[auth.User, Depends(get_current_user)]):
     if user.admin_level < 1:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions.")
-    users = await auth.User.all()
 
-    return auth.User_Pydantic_List.from_queryset(users)
+    return await auth.User_Pydantic_List.from_queryset(auth.User.all())
 
 @router.get("/{user_id}")
-async def get_user(user_id: int, user: Annotated[auth.User, Depends(get_current_user)]):
-    if user.id == user_id:
-        return auth.User_Pydantic.from_tortoise_orm(user)
-
-    if user.admin_level < 1:
+async def get_user(user_id: uuid.UUID, user: Annotated[auth.User, Depends(get_current_user)]):
+    if user.admin_level < 1 and user.id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions.")
-    
-    user = await auth.User.filter(id=user_id).first()
-    if user is None:
+
+    if not (u := await auth.User.filter(id=user_id).first()):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    return auth.User_Pydantic.from_tortoise_orm(user)
+    return await auth.User_Pydantic.from_tortoise_orm(u)
 
 @router.get("/{user_id}/characters")
-async def get_user_characters(user_id: int, user: Annotated[auth.User, Depends(get_current_user)]):
-    if user.id == user_id:
-        characters = await user.characters
-    else:
-        if user.admin_level < 1:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions.")
-        user = await auth.User.filter(id=user_id).prefetch_related("characters").first()
-        if user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-        characters = user.characters
+async def get_user_characters(user_id: uuid.UUID, user: Annotated[auth.User, Depends(get_current_user)]):
+    if user.id != user_id and user.admin_level < 1:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions.")
 
-    return characters.Character_Pydantic_List.from_queryset(characters)
+    if not (u := await auth.User.filter(id=user_id).first()):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    return await characters.Character_Pydantic_List.from_queryset(characters.Character.filter(user=u))
