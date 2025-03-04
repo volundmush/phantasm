@@ -25,6 +25,11 @@ refresh_expire_minutes = 10080
 # The class that'll be used to handle the game.
 application = "phantasm.game.application.Application"
 
+[game.lockfuncs]
+# The key is only used for overrides or disables. It loads all functions defined
+# in the module which do not begin with an underscore.
+base = "phantasm.game.locks.lockfuncs"
+
 [game.tortoise]
 db_url = "postgres://postgres:password@localhost:5432/phantasm"
 use_tz = true

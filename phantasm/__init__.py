@@ -1,0 +1,2 @@
+LOCKPARSER = None
+LOCKFUNCS = dict()

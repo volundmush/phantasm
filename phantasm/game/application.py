@@ -1,12 +1,14 @@
 import mudpy
+import phantasm
 import importlib
+from lark import Lark
 from pathlib import Path
 from fastapi import FastAPI
 from hypercorn import Config
 from hypercorn.asyncio import serve
 from tortoise import Tortoise
 from mudpy.game.application import Application as OldApplication
-
+from mudpy.utils import callables_from_module
 
 class Application(OldApplication):
 
@@ -46,10 +48,25 @@ class Application(OldApplication):
             v = importlib.import_module(v)
             self.fastapi_instance.include_router(v.router, prefix=f"/{k}", tags=[k])
 
+    async def setup_lark(self):
+        absolute_phantasm = Path(phantasm.__file__).parent
+        grammar = absolute_phantasm / "grammar.lark"
+        with open(grammar, "r") as f:
+            data = f.read()
+            parser = Lark(data)
+            phantasm.LOCKPARSER = parser
+
     async def setup(self):
         await super().setup()
+        await self.setup_lark()
         await self.setup_tortoise()
         await self.setup_fastapi()
+
+        for k, v in mudpy.SETTINGS["GAME"].get("lockfuncs", dict()).items():
+            lock_funcs = callables_from_module(v)
+            for name, func in lock_funcs.items():
+                phantasm.LOCKFUNCS[name] = func
+
 
     async def start(self):
         await serve(self.fastapi_instance, self.fastapi_config)

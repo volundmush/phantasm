@@ -1,7 +1,13 @@
 from tortoise.models import Model
 from tortoise import fields
 
-class Board(Model):
+from mudpy.utils import lazy_property
+from phantasm.game.locks.lockhandler import BaseLockHandler
+
+from .mixins import HasLocks
+
+
+class Board(Model, HasLocks):
     id = fields.IntField(primary_key=True)
     name = fields.CharField(max_length=255)
     faction = fields.ForeignKeyField("factions.Faction", null=True, related_name="boards", on_delete=fields.RESTRICT)
@@ -15,6 +21,10 @@ class Board(Model):
     class Meta:
         ordering = ["faction", "order"]
         unique_together = ["faction", "order"]
+
+    @lazy_property
+    def locks(self) -> BaseLockHandler:
+        return BaseLockHandler(self)
 
 
 class Post(Model):
