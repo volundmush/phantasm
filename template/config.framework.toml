@@ -13,6 +13,8 @@ port = 8000
 # "router" to be imported.
 auth = "phantasm.game.api.auth"
 users = "phantasm.game.api.users"
+boards = "phantasm.game.api.boards"
+characters = "phantasm.game.api.characters"
 
 [jwt]
 algorithm = "HS256"
@@ -30,12 +32,6 @@ application = "phantasm.game.application.Application"
 # in the module which do not begin with an underscore.
 base = "phantasm.game.locks.lockfuncs"
 
-[game.tortoise]
+[game.postgresql]
 db_url = "postgres://postgres:password@localhost:5432/phantasm"
 use_tz = true
-
-[game.tortoise.modules]
-auth = ["phantasm.game.models.auth"]
-characters = ["phantasm.game.models.characters"]
-factions = ["phantasm.game.models.factions"]
-info = ["phantasm.game.models.info"]

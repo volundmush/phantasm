@@ -31,5 +31,5 @@ class HasLocks:
         self.lock_data = {}
         await self.save()
 
-    async def access(self, accessor: "Character", access_type: str, default: typing.Optional[str] = None) -> bool:
+    async def access(self, accessor: "ActingAs", access_type: str, default: typing.Optional[str] = None) -> bool:
         return await self.locks.access(accessor, access_type, default=default)

@@ -10,7 +10,7 @@ PARSER_CACHE = dict()
 @dataclass(slots=True)
 class LockArguments:
     object: typing.Any
-    subject: "Character"
+    subject: "ActingAs"
     access_type: str
     args: typing.List[str|int]
 
