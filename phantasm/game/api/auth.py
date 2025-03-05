@@ -3,39 +3,29 @@ from typing import Annotated
 
 import mudpy
 import jwt
+import phantasm
+import typing
+import uuid
+import pydantic
 
-from tortoise.transactions import in_transaction
+from asyncpg.exceptions import UniqueViolationError
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 
 from .utils import crypt_context, oauth2_scheme, get_real_ip, get_current_user
-from ..models import auth
 
 router = APIRouter()
 
-@router.post("/register")
-async def register(data: Annotated[OAuth2PasswordRequestForm, Depends()]):
-    data.username = data.username.lower().strip()
-    data.password = data.password.strip()
+class UserLogin(BaseModel):
+    email: pydantic.EmailStr
+    password: str
 
-    if (found := await auth.User.filter(email=data.username).first()):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists.")
 
-    try:
-        hashed = crypt_context.hash(data.password)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Error hashing password.")
-
-    async with in_transaction():
-        user = await auth.User.create(email=data.username)
-        pass_new = await auth.Passwords.create(user=user, password=hashed)
-
-    return {"success": True}
-
-def _create_token(user: auth.User, expires: datetime, refresh: bool = False):
+def _create_token(sub: str, expires: datetime, refresh: bool = False):
     data = {
-        "sub": str(user.id),
+        "sub": sub,
         "exp": expires,
         "iat": datetime.now(tz=timezone.utc),
     }
@@ -44,38 +34,160 @@ def _create_token(user: auth.User, expires: datetime, refresh: bool = False):
     jwt_settings = mudpy.SETTINGS["JWT"]
     return jwt.encode(data, jwt_settings["secret"], algorithm=jwt_settings["algorithm"])
 
-def create_token(user: auth.User):
+def create_token(sub: str):
     jwt_settings = mudpy.SETTINGS["JWT"]
-    return _create_token(user, datetime.now(tz=timezone.utc) + timedelta(minutes=jwt_settings["token_expire_minutes"]))
+    return _create_token(sub, datetime.now(tz=timezone.utc) + timedelta(minutes=jwt_settings["token_expire_minutes"]))
 
-def create_refresh(user: auth.User):
+def create_refresh(sub: str):
     jwt_settings = mudpy.SETTINGS["JWT"]
-    return _create_token(user, datetime.now(tz=timezone.utc) + timedelta(minutes=jwt_settings["refresh_expire_minutes"]), True)
+    return _create_token(sub, datetime.now(tz=timezone.utc) + timedelta(minutes=jwt_settings["refresh_expire_minutes"]), True)
 
-@router.post("/login")
-async def login(request: Request, data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+    @classmethod
+    def from_uuid(cls, id: uuid.UUID) -> "TokenResponse":
+        sub = str(id)
+        token = create_token(sub)
+        refresh = create_refresh(sub)
+        return TokenResponse(token, refresh, "bearer")
+
+async def handle_login(request: Request, password: str, user: uuid.UUID) -> TokenResponse:
+    ip = get_real_ip(request)
+    user_agent = request.headers.get("User-Agent", None)
+    
+    async with phantasm.PGPOOL.acquire() as conn:
+        async with conn.transaction():
+            # Retrieve the latest password row for this user.
+            password_row = await conn.fetchrow(
+                """
+                SELECT password
+                FROM user_passwords
+                WHERE user_id = $1
+                """,
+                user
+            )
+            if not (password_row and password_row["password"] and crypt_context.verify(password, password_row["password"])):
+                await conn.execute(
+                    """
+                    INSERT INTO loginrecords (user_id, ip_address, success, user_agent)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    user, ip, False, user_agent
+                )
+                raise HTTPException(status_code=400, detail="Invalid credentials.")
+            
+            # Record successful login.
+            await conn.execute(
+                """
+                INSERT INTO loginrecords (user_id, ip_address, success, user_agent)
+                VALUES ($1, $2, $3, $4)
+                """,
+                user, ip, True, user_agent
+            )
+    
+    # Create tokens based on the user's email.
+    return TokenResponse.from_uuid(user)
+
+
+async def register_user(email: str, hashed_password: str) -> int:
+    async with phantasm.PGPOOL.acquire() as conn:
+        async with conn.transaction():
+            try:
+                # Insert the new user.
+                user_row = await conn.fetchrow(
+                    """
+                    INSERT INTO users (email)
+                    VALUES ($1)
+                    RETURNING id
+                    """,
+                    email
+                )
+            except UniqueViolationError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User already exists."
+                )
+            user_id = user_row["id"]
+
+            # Insert the password record.
+            password_row = await conn.fetchrow(
+                """
+                INSERT INTO passwords (user_id, password)
+                VALUES ($1, $2)
+                RETURNING id
+                """,
+                user_id, hashed_password
+            )
+            password_id = password_row["id"]
+
+            # Update the user to set the current password.
+            await conn.execute(
+                "UPDATE users SET current_password_id=$1 WHERE id=$2",
+                password_id, user_id
+            )
+            return user_id
+
+@router.post("/register", response_model=TokenResponse)
+async def register(data: Annotated[UserLogin, Depends()]):
+    data.email = data.email.lower().strip()
+    data.password = data.password.strip()
+    ip = get_real_ip(request)
+    user_agent = request.headers.get("User-Agent", None)
+
+    try:
+        hashed = crypt_context.hash(data.password)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Error hashing password.")
+
+    user = await register_user(data.email, hashed)
+
+    return TokenResponse.from_uuid(user)
+
+@router.post("/login", response_model=TokenResponse)
+async def login(request: Request, data: Annotated[UserLogin, Depends()]):
     data.username = data.username.lower().strip()
     data.password = data.password.strip()
 
     if not (user := await auth.User.filter(email=data.username).first()):
         raise HTTPException(status_code=400, detail="Invalid credentials.")
 
-    ip = get_real_ip(request)
-    user_agent = request.headers.get("User-Agent", None)
+    return await handle_login(request, data, user)
 
-    password = await auth.Passwords.filter(user=user).order_by("-created_at").first()
+class CharacterLogin(BaseModel):
+    name: str
+    password: str
 
-    if not (password and password.password and crypt_context.verify(data.password, password.password)):
-        await auth.LoginRecord.create(user=user, ip_address=ip, success=False, user_agent=user_agent)
+
+class CharacterTokenResponse(TokenResponse):
+    character: int
+
+
+@router.post("/play", response_model=CharacterTokenResponse)
+async def login(request: Request, data: Annotated[CharacterLogin, Depends()]):
+    data.name = data.name.lower().strip()
+    data.password = data.password.strip()
+
+    with await phantasm.PGPOOL.acquire() as conn:
+        character_row = await conn.fetchrow(
+            """
+            SELECT c.id,c.user_id
+            FROM characters c
+            WHERE c.name = $1
+            """,
+            data.name
+        )
+    if not character_row:
         raise HTTPException(status_code=400, detail="Invalid credentials.")
-
-    await auth.LoginRecord.create(user=user, ip_address=ip, success=True, user_agent=user_agent)
-    token = create_token(user)
-    refresh = create_refresh(user)
-    return {"access_token": token, "refresh_token": refresh, "token_type": "bearer"}
+    
+    result = await handle_login(request, data.password, character_row["user_id"])
+    return CharacterTokenResponse(character=character_row["id"], **result.dict())
 
 
-@router.post("/refresh")
+
+@router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(ref: str):
     jwt_settings = mudpy.SETTINGS["JWT"]
     try:
@@ -87,21 +199,8 @@ async def refresh_token(ref: str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token.")
     if (sub := payload.get("sub", None)) is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
-    if not (user := await auth.User.filter(id=sub).first()):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    with await phantasm.PGPOOL.acquire() as conn:
+        if not (user_row := await conn.fetchrow("SELECT id FROM users WHERE id = $1", sub)):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
 
-    # Create a new access token
-    new_access_token = create_token(user)
-    # Optionally, create a new refresh token
-    new_refresh_token = create_refresh(user)
-
-    return {
-        "access_token": new_access_token,
-        "refresh_token": new_refresh_token,  # if you want to rotate refresh tokens
-        "token_type": "bearer"
-    }
-
-
-@router.get("/me")
-async def read_users_me(current_user: Annotated[auth.User, Depends(get_current_user)]):
-    return await auth.User_Pydantic.from_tortoise_orm(current_user)
+    return TokenResponse.from_uuid(sub)

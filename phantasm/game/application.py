@@ -1,12 +1,12 @@
 import mudpy
 import phantasm
 import importlib
+import asyncpg
 from lark import Lark
 from pathlib import Path
 from fastapi import FastAPI
 from hypercorn import Config
 from hypercorn.asyncio import serve
-from tortoise import Tortoise
 from mudpy.game.application import Application as OldApplication
 from mudpy.utils import callables_from_module
 
@@ -17,13 +17,10 @@ class Application(OldApplication):
         self.fastapi_config = None
         self.fastapi_instance = None
 
-    async def setup_tortoise(self):
-        from tortoise.queryset import QuerySet
-        #monkey patch for compatability.
-        QuerySet.fetch_related = QuerySet.prefetch_related
-        settings = mudpy.SETTINGS["GAME"]["tortoise"]
-        await Tortoise.init(**settings)
-        await Tortoise.generate_schemas()
+    async def setup_asyncpg(self):
+        settings = mudpy.SETTINGS["GAME"]["postgresql"]
+        pool = await asyncpg.create_pool(**settings)
+        phantasm.PGPOOL = pool
 
     async def setup_fastapi(self):
         settings = mudpy.SETTINGS
@@ -59,7 +56,7 @@ class Application(OldApplication):
     async def setup(self):
         await super().setup()
         await self.setup_lark()
-        await self.setup_tortoise()
+        await self.setuo_asyncpg()
         await self.setup_fastapi()
 
         for k, v in mudpy.SETTINGS["GAME"].get("lockfuncs", dict()).items():
