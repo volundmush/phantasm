@@ -15,14 +15,11 @@ class LockArguments:
     args: typing.List[str|int]
 
 
-class BaseLockHandler:
+class LockHandler:
     """
     This is the base lockhandler used for generic lock checks. It should be specialized for
     different types of lock-holders or users if needed.
     """
-
-    def __init__(self, owner):
-        self.owner = owner
 
     async def set_lock(self, access_type: str, lock: str):
         try:
@@ -30,7 +27,7 @@ class BaseLockHandler:
             PARSER_CACHE[lock] = parsed
         except LarkError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid lock: {e}")
-        await self.owner.save_lock(access_type, lock)
+        await self.save_lock(access_type, lock)
 
     async def parse_lock(self, access_type: str, default: typing.Optional[str] = None):
         lock = await self.owner.load_lock(access_type) or default
@@ -43,13 +40,13 @@ class BaseLockHandler:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid lock: {e}")
         return PARSER_CACHE[lock]
 
-    async def access(self, accessor: "Character", access_type: str, default: typing.Optional[str] = None):
+    async def access(self, accessor: "ActingAs", access_type: str, default: typing.Optional[str] = None):
         lock = await self.parse_lock(access_type, default)
         if lock:
             return await self.evaluate_lock(accessor, access_type, lock)
         return False
 
-    async def evaluate_lock(self, accessor: "Character", access_type: str, lock_parsed: lark.Tree) -> bool:
+    async def evaluate_lock(self, accessor: "ActingAs", access_type: str, lock_parsed: lark.Tree) -> bool:
         """
         Evaluate the parsed lock expression asynchronously.
         Lock expressions support:
@@ -117,7 +114,7 @@ class BaseLockHandler:
                                 args.append(arg.value)
                     # Create LockArguments using self.owner (the lock-holder), accessor, access_type, and the arguments.
                     lock_args = LockArguments(
-                        object=self.owner,
+                        object=self,
                         subject=accessor,
                         access_type=access_type,
                         args=args

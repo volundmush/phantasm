@@ -1,6 +1,6 @@
 mudpy
 rich
-tortoise-orm[asyncpg]
+pydantic[email]
 fastapi[standard]
 aioquic
 hypercorn[h3]

@@ -13,8 +13,9 @@ port = 8000
 # "router" to be imported.
 auth = "phantasm.game.api.auth"
 users = "phantasm.game.api.users"
-boards = "phantasm.game.api.boards"
 characters = "phantasm.game.api.characters"
+boards = "phantasm.game.api.boards"
+
 
 [jwt]
 algorithm = "HS256"

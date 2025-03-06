@@ -2,6 +2,7 @@ import mudpy
 import phantasm
 import importlib
 import asyncpg
+import orjson
 from lark import Lark
 from pathlib import Path
 from fastapi import FastAPI
@@ -9,6 +10,17 @@ from hypercorn import Config
 from hypercorn.asyncio import serve
 from mudpy.game.application import Application as OldApplication
 from mudpy.utils import callables_from_module
+
+
+async def init_connection(conn: asyncpg.Connection):
+    await conn.set_type_codec(
+        "jsonb",  # The PostgreSQL type to target.
+        encoder=lambda v: orjson.dumps(v).decode("utf-8"),
+        decoder=orjson.loads,
+        schema="pg_catalog",
+        format="text",
+    )
+
 
 class Application(OldApplication):
 
@@ -19,7 +31,7 @@ class Application(OldApplication):
 
     async def setup_asyncpg(self):
         settings = mudpy.SETTINGS["GAME"]["postgresql"]
-        pool = await asyncpg.create_pool(**settings)
+        pool = await asyncpg.create_pool(init=init_connection, **settings)
         phantasm.PGPOOL = pool
 
     async def setup_fastapi(self):
@@ -56,14 +68,13 @@ class Application(OldApplication):
     async def setup(self):
         await super().setup()
         await self.setup_lark()
-        await self.setuo_asyncpg()
+        await self.setup_asyncpg()
         await self.setup_fastapi()
 
         for k, v in mudpy.SETTINGS["GAME"].get("lockfuncs", dict()).items():
             lock_funcs = callables_from_module(v)
             for name, func in lock_funcs.items():
                 phantasm.LOCKFUNCS[name] = func
-
 
     async def start(self):
         await serve(self.fastapi_instance, self.fastapi_config)
